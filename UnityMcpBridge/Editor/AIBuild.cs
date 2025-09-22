@@ -212,7 +212,7 @@ namespace MCPForUnity.Editor
                             "test-suite",
                             new System.Xml.Linq.XAttribute("type", child.Test?.HasChildren == true ? "Suite" : "Test"),
                             new System.Xml.Linq.XAttribute("name", child.Name ?? "Unnamed"),
-                            new System.Xml.Linq.XAttribute("result", child.ResultState?.Status.ToString() ?? "Unknown"),
+                            new System.Xml.Linq.XAttribute("result", GetStatusString(child)),
                             BuildTestCaseElements(child)
                         );
                     }
@@ -222,9 +222,9 @@ namespace MCPForUnity.Editor
                             "test-case",
                             new System.Xml.Linq.XAttribute("name", child.Name ?? "Unnamed"),
                             new System.Xml.Linq.XAttribute("fullname", child.FullName ?? child.Name ?? "Unnamed"),
-                            new System.Xml.Linq.XAttribute("result", child.ResultState?.Status.ToString() ?? "Unknown"),
+                            new System.Xml.Linq.XAttribute("result", GetStatusString(child)),
                             new System.Xml.Linq.XAttribute("duration", child.Duration.ToString("F3")),
-                            child.ResultState?.Status == TestStatus.Failed && !string.IsNullOrEmpty(child.Message)
+                            IsFailure(child) && !string.IsNullOrEmpty(child.Message)
                                 ? new System.Xml.Linq.XElement(
                                     "failure",
                                     new System.Xml.Linq.XElement("message", child.Message ?? string.Empty),
@@ -249,7 +249,7 @@ namespace MCPForUnity.Editor
                     Failed = failed;
                     Skipped = skipped;
                     DurationSeconds = result.Duration;
-                    Result = result.ResultState?.Status.ToString() ?? "Unknown";
+                    Result = GetStatusString(result);
                 }
                 else
                 {
@@ -302,21 +302,118 @@ namespace MCPForUnity.Editor
                     }
 
                     total++;
-                    switch (current.ResultState?.Status)
+                    switch (NormalizeStatus(GetStatusString(current)))
                     {
-                        case TestStatus.Passed:
+                        case NormalizedStatus.Passed:
                             passed++;
                             break;
-                        case TestStatus.Failed:
+                        case NormalizedStatus.Failed:
                             failed++;
                             break;
-                        case TestStatus.Inconclusive:
-                        case TestStatus.Skipped:
-                        case TestStatus.Ignored:
+                        case NormalizedStatus.Skipped:
                             skipped++;
                             break;
                     }
                 }
+            }
+        }
+
+        private static bool IsFailure(ITestResultAdaptor result)
+        {
+            return NormalizeStatus(GetStatusString(result)) == NormalizedStatus.Failed;
+        }
+
+        private static string GetStatusString(ITestResultAdaptor result)
+        {
+            if (result == null)
+            {
+                return "Unknown";
+            }
+
+            try
+            {
+                var resultState = GetPropertyValue(result, "ResultState");
+                if (resultState != null)
+                {
+                    var statusValue = GetPropertyValue(resultState, "Status") ?? resultState;
+                    var statusString = statusValue?.ToString();
+                    if (!string.IsNullOrEmpty(statusString))
+                    {
+                        return statusString;
+                    }
+                }
+
+                var testStatus = GetPropertyValue(result, "TestStatus");
+                var testStatusString = testStatus?.ToString();
+                if (!string.IsNullOrEmpty(testStatusString))
+                {
+                    return testStatusString;
+                }
+            }
+            catch
+            {
+                // ignored - fall through to Unknown
+            }
+
+            return "Unknown";
+        }
+
+        private static object GetPropertyValue(object instance, string propertyName)
+        {
+            if (instance == null || string.IsNullOrEmpty(propertyName))
+            {
+                return null;
+            }
+
+            var type = instance.GetType();
+            var property = type.GetProperty(propertyName);
+            if (property == null)
+            {
+                return null;
+            }
+
+            try
+            {
+                return property.GetValue(instance, null);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private enum NormalizedStatus
+        {
+            Unknown,
+            Passed,
+            Failed,
+            Skipped
+        }
+
+        private static NormalizedStatus NormalizeStatus(string status)
+        {
+            if (string.IsNullOrEmpty(status))
+            {
+                return NormalizedStatus.Unknown;
+            }
+
+            switch (status.ToLowerInvariant())
+            {
+                case "passed":
+                case "success":
+                case "succeeded":
+                    return NormalizedStatus.Passed;
+                case "failed":
+                case "failure":
+                case "error":
+                    return NormalizedStatus.Failed;
+                case "skipped":
+                case "ignored":
+                case "inconclusive":
+                case "notexecuted":
+                    return NormalizedStatus.Skipped;
+                default:
+                    return NormalizedStatus.Unknown;
             }
         }
     }
