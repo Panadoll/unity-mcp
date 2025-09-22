@@ -1,0 +1,48 @@
+name: Unity MCP Pipeline
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - UnityMcpBridge/**
+      - scripts/try_pipeline.sh
+      - .github/workflows/unity-pipeline.yml
+      - validation.json
+  pull_request:
+    paths:
+      - UnityMcpBridge/**
+      - scripts/try_pipeline.sh
+      - .github/workflows/unity-pipeline.yml
+      - validation.json
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        working-directory: UnityMcpBridge/UnityMcpServer~/src
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install .
+
+      - name: Execute MCP pipeline (Unity project probe/compile/tests)
+        env:
+          UNITY_MCP_SKIP_STARTUP_CONNECT: "1"
+        run: |
+          scripts/try_pipeline.sh "$(pwd)/TestProjects/UnityMCPTests" "$(pwd)/logs"
+
+      - name: Upload pipeline logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-pipeline-logs
+          path: logs
+          if-no-files-found: warn

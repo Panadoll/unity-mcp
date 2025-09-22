@@ -350,3 +350,95 @@ MIT License. See [LICENSE](LICENSE) file.
     <img src="logo.png" alt="Coplay Logo" width="100%">
   </a>
 </p>
+
+---
+
+## 🧪 Pipeline 使用指南
+
+MCP for Unity 现已内置统一的自动化编译/测试管线。你可以使用仓库提供的脚本在本地快速验证：
+
+```bash
+# 以当前目录作为 Unity 工程根目录运行整套校验
+scripts/try_pipeline.sh /path/to/UnityProject
+
+# 可选：指定日志目录
+scripts/try_pipeline.sh /path/to/UnityProject /path/to/logs
+```
+
+脚本会依次调用以下工具（均返回统一结构 `{ ok, exitCode, data?, errors? }`）并将 JSON 结果写入 `logs/*.json`；
+一旦任一步骤失败，脚本会以非零状态退出，方便在 CI 中作为守门人。
+
+1. `unity_project_probe`
+2. `roslyn_check`
+3. `unity_compile`
+4. `unity_run_tests`（EditMode 与 PlayMode）
+5. `unity_build_il2cpp`（可选）
+
+同时，仓库根目录新增的 `validation.json` 描述了推荐的通过阈值：
+
+```json
+{
+  "compile": {"maxErrors": 0},
+  "tests": {"editMinPassRate": 0.95, "playMinPassRate": 0.90},
+  "il2cpp": {"required": false}
+}
+```
+
+---
+
+## 🧰 工具契约（JSON）
+
+MCP Server 中的核心工具契约如下，所有响应均遵循 `{ ok:boolean, exitCode:number, data?:object, errors?:[...] }`：
+
+### `unity_project_probe`
+
+**入参**：`{ projectPath: string }`
+
+**出参（data）示例**：
+
+```json
+{
+  "unityVersion": "6000.0.0f1",
+  "apiCompatibilityLevel": "NET_Standard_2_1",
+  "scriptingBackendPerPlatform": {"Standalone": "Mono", "Android": "IL2CPP"},
+  "packages": [{"name": "com.unity.test-framework", "version": "1.4.5"}],
+  "editorApplicationPath": "/Applications/Unity/Unity.app",
+  "roslynCompilerPath": ".../Tools/Roslyn/csc",
+  "managedAssemblySearchPaths": [".../Managed", ".../Managed/UnityEngine", ...]
+}
+```
+
+### `roslyn_check`
+
+**入参**：`{ projectPath: string, glob?: string, langVersion?: "9.0" }`
+
+**出参（data）**：`{ "checked": number, "errors": [{code,file,line,message}, ...] }`
+
+### `unity_compile`
+
+**入参**：`{ projectPath: string, logPath?: string }`
+
+**出参（data）**：`{ "errors": [...], "warnings": [...], "rawLogPath": ".../Editor.log" }`
+
+### `unity_run_tests`
+
+**入参**：`{ projectPath: string, platform: "EditMode" | "PlayMode", resultsPath?: string }`
+
+**出参（data）**：
+
+```json
+{
+  "passed": 42,
+  "failed": 0,
+  "durationSec": 12.34,
+  "failures": [{"testName": "Namespace.Test", "message": "Assertion", "stacktrace": "..."}],
+  "resultsPath": "logs/editmode-results.xml",
+  "logPath": ".../Editor.log"
+}
+```
+
+### `unity_build_il2cpp`
+
+**入参**：`{ projectPath: string, target: string, outputDir?: string }`
+
+若项目未配置自定义 BuildScript，工具会返回结构化错误 `unity_build_il2cpp_not_implemented`，方便上层决定是否忽略。
