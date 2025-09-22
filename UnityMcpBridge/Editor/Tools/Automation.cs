@@ -134,11 +134,6 @@ namespace MCPForUnity.Editor.Tools
                 try
                 {
                     ScriptingImplementation backend = PlayerSettings.GetScriptingBackend(group);
-                    if (backend != ScriptingImplementation.IL2CPP && backend != ScriptingImplementation.Mono && backend != ScriptingImplementation.WinRTDotNET)
-                    {
-                        continue;
-                    }
-
                     result[group.ToString()] = backend.ToString();
                 }
                 catch

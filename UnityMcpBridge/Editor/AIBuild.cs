@@ -5,7 +5,6 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using UnityEditor;
-using UnityEditor.Compilation;
 using UnityEditor.TestTools.TestRunner.Api;
 using UnityEngine;
 
@@ -46,7 +45,7 @@ namespace MCPForUnity.Editor
         {
             AssetDatabase.Refresh();
             var start = DateTime.UtcNow;
-            while (CompilationPipeline.isCompiling)
+            while (EditorApplication.isCompiling)
             {
                 Thread.Sleep(100);
                 if ((DateTime.UtcNow - start).TotalMinutes > 10)
@@ -242,12 +241,25 @@ namespace MCPForUnity.Editor
         {
             public NUnitSummary(ITestResultAdaptor result)
             {
-                Total = result?.TestCaseCount ?? 0;
-                Passed = result?.PassCount ?? 0;
-                Failed = result?.FailCount ?? 0;
-                Skipped = result?.SkipCount ?? 0;
-                DurationSeconds = result?.Duration ?? 0.0;
-                Result = result?.ResultState?.Status.ToString() ?? "Unknown";
+                if (result != null)
+                {
+                    CountResults(result, out int total, out int passed, out int failed, out int skipped);
+                    Total = total;
+                    Passed = passed;
+                    Failed = failed;
+                    Skipped = skipped;
+                    DurationSeconds = result.Duration;
+                    Result = result.ResultState?.Status.ToString() ?? "Unknown";
+                }
+                else
+                {
+                    Total = 0;
+                    Passed = 0;
+                    Failed = 0;
+                    Skipped = 0;
+                    DurationSeconds = 0.0;
+                    Result = "Unknown";
+                }
             }
 
             public int Total { get; }
@@ -256,6 +268,56 @@ namespace MCPForUnity.Editor
             public int Skipped { get; }
             public double DurationSeconds { get; }
             public string Result { get; }
+
+            private static void CountResults(ITestResultAdaptor node, out int total, out int passed, out int failed, out int skipped)
+            {
+                total = 0;
+                passed = 0;
+                failed = 0;
+                skipped = 0;
+
+                if (node == null)
+                {
+                    return;
+                }
+
+                var stack = new Stack<ITestResultAdaptor>();
+                stack.Push(node);
+
+                while (stack.Count > 0)
+                {
+                    var current = stack.Pop();
+                    if (current == null)
+                    {
+                        continue;
+                    }
+
+                    if (current.HasChildren)
+                    {
+                        foreach (var child in current.Children ?? Array.Empty<ITestResultAdaptor>())
+                        {
+                            stack.Push(child);
+                        }
+                        continue;
+                    }
+
+                    total++;
+                    switch (current.ResultState?.Status)
+                    {
+                        case TestStatus.Passed:
+                            passed++;
+                            break;
+                        case TestStatus.Failed:
+                            failed++;
+                            break;
+                        case TestStatus.Inconclusive:
+                        case TestStatus.Skipped:
+                        case TestStatus.Ignored:
+                            skipped++;
+                            break;
+                    }
+                }
+            }
         }
     }
 }
