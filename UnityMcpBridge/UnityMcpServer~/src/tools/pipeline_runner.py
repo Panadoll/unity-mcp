@@ -32,22 +32,35 @@ def _write_result(path: Path, result) -> None:
         handle.write("\n")
 
 
-def run_pipeline(project_path: Path, log_dir: Path, include_playmode: bool = True, run_il2cpp: bool = False) -> None:
+def run_pipeline(
+    project_path: Path,
+    log_dir: Path,
+    include_playmode: bool = True,
+    run_il2cpp: bool = False,
+) -> None:
     project_path = project_path.resolve()
     log_dir = log_dir.resolve()
 
     steps: Dict[str, Callable[[], CommandResult]] = {
         "unity_project_probe": lambda: _unity_project_probe_impl(project_path),
-        "roslyn_check": lambda: _roslyn_check_impl(project_path, _DEFAULT_SOURCE_GLOB, "9.0"),
+        "roslyn_check": lambda: _roslyn_check_impl(
+            project_path, _DEFAULT_SOURCE_GLOB, "9.0"
+        ),
         "unity_compile": lambda: _unity_compile_impl(project_path, None),
-        "unity_run_tests_editmode": lambda: _unity_run_tests_impl(project_path, "EditMode", None),
+        "unity_run_tests_editmode": lambda: _unity_run_tests_impl(
+            project_path, "EditMode", None
+        ),
     }
 
     if include_playmode:
-        steps["unity_run_tests_playmode"] = lambda: _unity_run_tests_impl(project_path, "PlayMode", None)
+        steps["unity_run_tests_playmode"] = lambda: _unity_run_tests_impl(
+            project_path, "PlayMode", None
+        )
 
     if run_il2cpp:
-        steps["unity_build_il2cpp"] = lambda: _unity_build_il2cpp_impl(project_path, "Standalone", None)
+        steps["unity_build_il2cpp"] = lambda: _unity_build_il2cpp_impl(
+            project_path, "Standalone", None
+        )
 
     failed_steps: List[str] = []
     worst_exit = 0
@@ -62,19 +75,37 @@ def run_pipeline(project_path: Path, log_dir: Path, include_playmode: bool = Tru
 
     if failed_steps:
         message = ", ".join(failed_steps)
-        print(f"[pipeline_runner] Failure in steps: {message}", file=sys.stderr)
+        sys.stderr.write(f"[pipeline_runner] Failure in steps: {message}\n")
         raise SystemExit(worst_exit or 1)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Execute the Unity MCP pipeline locally.")
-    parser.add_argument("--project", dest="project", required=True, help="Path to the Unity project root")
-    parser.add_argument("--log-dir", dest="log_dir", default="logs", help="Directory for JSON outputs")
-    parser.add_argument("--no-playmode", action="store_true", help="Skip play mode tests")
-    parser.add_argument("--il2cpp", action="store_true", help="Attempt IL2CPP build step")
+    parser = argparse.ArgumentParser(
+        description="Execute the Unity MCP pipeline locally."
+    )
+    parser.add_argument(
+        "--project",
+        dest="project",
+        required=True,
+        help="Path to the Unity project root",
+    )
+    parser.add_argument(
+        "--log-dir", dest="log_dir", default="logs", help="Directory for JSON outputs"
+    )
+    parser.add_argument(
+        "--no-playmode", action="store_true", help="Skip play mode tests"
+    )
+    parser.add_argument(
+        "--il2cpp", action="store_true", help="Attempt IL2CPP build step"
+    )
     args = parser.parse_args()
 
-    run_pipeline(Path(args.project), Path(args.log_dir), include_playmode=not args.no_playmode, run_il2cpp=args.il2cpp)
+    run_pipeline(
+        Path(args.project),
+        Path(args.log_dir),
+        include_playmode=not args.no_playmode,
+        run_il2cpp=args.il2cpp,
+    )
 
 
 if __name__ == "__main__":
