@@ -1055,6 +1055,10 @@ namespace MCPForUnity.Editor
                     "manage_shader" => ManageShader.HandleCommand(paramsObject),
                     "read_console" => ReadConsole.HandleCommand(paramsObject),
                     "manage_menu_item" => ManageMenuItem.HandleCommand(paramsObject),
+                    "unity_project_probe" => HandleAutomationCommand("unity_project_probe", paramsObject),
+                    "unity_compile" => HandleAutomationCommand("unity_compile", paramsObject),
+                    "unity_run_tests" => HandleAutomationCommand("unity_run_tests", paramsObject),
+                    "unity_build_il2cpp" => HandleAutomationCommand("unity_build_il2cpp", paramsObject),
                     _ => throw new ArgumentException(
                         $"Unknown or unsupported command type: {command.type}"
                     ),
@@ -1100,6 +1104,32 @@ namespace MCPForUnity.Editor
             catch (Exception ex)
             {
                 return Response.Error($"manage_scene dispatch error: {ex.Message}");
+            }
+        }
+
+        private static object HandleAutomationCommand(string commandType, JObject paramsObject)
+        {
+            try
+            {
+                if (IsDebugEnabled()) Debug.Log($"[MCP] {commandType}: dispatching to main thread");
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                Func<object> invoke = commandType switch
+                {
+                    "unity_project_probe" => () => Automation.HandleUnityProjectProbe(paramsObject),
+                    "unity_compile" => () => Automation.HandleUnityCompile(paramsObject),
+                    "unity_run_tests" => () => Automation.HandleUnityRunTests(paramsObject),
+                    "unity_build_il2cpp" => () => Automation.HandleUnityBuildIl2Cpp(paramsObject),
+                    _ => () => Response.Error($"Unknown automation command: {commandType}")
+                };
+
+                var result = InvokeOnMainThreadWithTimeout(invoke, FrameIOTimeoutMs);
+                sw.Stop();
+                if (IsDebugEnabled()) Debug.Log($"[MCP] {commandType}: completed in {sw.ElapsedMilliseconds} ms");
+                return result ?? Response.Error($"{commandType} returned null (timeout or error)");
+            }
+            catch (Exception ex)
+            {
+                return Response.Error($"{commandType} dispatch error: {ex.Message}");
             }
         }
 

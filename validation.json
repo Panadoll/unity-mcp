@@ -1,0 +1,5 @@
+{
+  "compile": {"maxErrors": 0},
+  "tests": {"editMinPassRate": 0.95, "playMinPassRate": 0.90},
+  "il2cpp": {"required": false}
+}
